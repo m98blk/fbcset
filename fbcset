@@ -88,17 +88,19 @@ while true; do
     esac
 done
 
-if [ -z $1 ]; then
-    display_help
-    exit 5
-fi
 
 ###
 # Find the theme if custom path not set
 ###
 
-# First, check if the directory exists
+# File path checks
 if [ $default_path == 1 ]; then
+    
+    # Display help if arg missing
+    if [ -z $1 ]; then
+        display_help
+        exit 5
+    fi
     if [ ! -e $THEME_FILE_DIR ]; then
         echo 'Error: directory ~/.fbthemes not found' >&2
         exit 2
@@ -112,8 +114,11 @@ fi
 
 # Check if we can find and read the given file
 if [ ! -e $theme_file_path ]; then
-    echo "Error: theme file not found" >&2
+    echo "Error: file ${theme_file_path} not found" >&2
     exit 2
+elif [ -d $theme_file_path ]; then
+    echo "Error: target file is a directory" >&2
+    exit 3
 elif [ ! -r $theme_file_path ]; then
     echo "Error: could not read theme file" >&2
     exit 4
