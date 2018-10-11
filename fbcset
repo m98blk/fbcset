@@ -1,0 +1,141 @@
+#!/bin/bash
+#####
+# fbcset: fbterm color theme setter
+# by Matt Black, 2018
+#####
+
+
+###
+# Declare constants and flags
+###
+FBCSET_VERSION='0.0.2'
+THEME_FILE_DIR="${HOME}/.fbthemes"
+verbose=1
+default_path=1
+
+display_version() {
+    echo "fbcset version ${FBCSET_VERSION} by Matt Black, 2018"
+}
+
+display_help() {
+    display_version
+    cat << 'EOF'
+Usage: fbcset [options] theme-file-name
+
+Options:
+    -f | --file <path>          Read from a given file instead of
+                                    scanning the default directory
+    -h | --help                 Print this help text and exit
+    -q | --quiet                Suppress standard output
+    -v | --version              Print version and exit
+
+By default, fbcset looks for themes in the $HOME/.fbthemes directory.
+You can set the path explicitly using the -f option.
+
+Theme files may contain any number (within fbterm's capabilities) of lines,
+assigning one color per line in the following format:
+<color#_decimal> #rrggbb
+
+Example:
+0                 #202020
+8                 #4c4c4c
+1                 #a02030
+EOF
+}
+
+
+###
+# Handle opts
+###
+opts=$(getopt -o 'f:hqv' -l 'file:,help,quiet,version' -n 'fbcset' -- "$@")
+if [ $? -ne 0 ]; then
+    echo "Error getting options" >&2
+    exit 1
+fi
+
+eval set -- "$opts"
+unset opts
+
+while true; do
+    case "$1" in
+        '-f'|'--file')
+            default_path=0
+            theme_file_path="$2"
+            shift 2
+            continue
+            ;;
+            
+        '-h'|'--help')
+            display_help
+            exit 0
+            ;;
+        
+        '-q'|'--quiet')
+            verbose=0
+            shift
+            continue
+            ;;
+            
+        '-v'|'--version')
+            display_version
+            exit 0
+            ;;
+
+        '--')
+            shift
+            break
+            ;;
+    esac
+done
+
+
+###
+# Find the theme if custom path not set
+###
+
+# First, check if the directory exists
+if [ $default_path == 1 ]; then
+    if [ ! -e $THEME_FILE_DIR ]; then
+        echo 'Error: directory ~/.fbthemes not found' >&2
+        exit 2
+    elif [ ! -d $THEME_FILE_DIR ]; then
+        echo 'Error: ~/.fbthemes is not a directory' >&2
+        exit 3
+    fi
+    theme_file_name="$1"
+    theme_file_path="${THEME_FILE_DIR}/${theme_file_name}"
+fi
+
+# Check if we can find and read the given file
+if [ ! -e $theme_file_path ]; then
+    echo "Error: theme file not found" >&2
+    exit 2
+elif [ ! -r $theme_file_path ]; then
+    echo "Error: could not read theme file" >&2
+    exit 4
+fi
+
+
+###
+# Parse and fulfill the instructions
+###
+while IFS="" read -r line || [ -n "$line" ]; do
+    col_num=`echo $line | grep -oE "^([0-9]+)"`
+
+    if [ -z "$col_num" ]; then
+        continue
+    fi
+
+    col_hex=`echo $line | grep -oE "(.{6})$"`
+    col_r=$(( 16#${col_hex:0:2} ))
+    col_g=$(( 16#${col_hex:2:2} ))
+    col_b=$(( 16#${col_hex:4:2} ))
+    [ $verbose == 0 ] || printf "setting color %03d: #%s/%d,%d,%d\n"\
+        $col_num $col_hex $col_r $col_g $col_b
+    col_escape="\e[3;${col_num};${col_r};${col_g};${col_b}}"
+    echo -en $col_escape
+done < $theme_file_path
+
+[ $verbose == 0 ] || echo "done"
+
+exit 0
