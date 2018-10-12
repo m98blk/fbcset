@@ -8,7 +8,7 @@
 ###
 # Declare constants and flags
 ###
-FBCSET_VERSION='0.0.2'
+FBCSET_VERSION='0.1.0'
 THEME_FILE_DIR="${HOME}/.fbthemes"
 verbose=1
 default_path=1
@@ -37,9 +37,9 @@ assigning one color per line in the following format:
 <color#_decimal> #rrggbb
 
 Example:
-0                 #202020
-8                 #4c4c4c
-1                 #a02030
+0       #202020
+8       #4c4c4c
+12      #a02030
 EOF
 }
 
@@ -125,22 +125,54 @@ elif [ ! -r $theme_file_path ]; then
 fi
 
 
+
 ###
 # Parse and fulfill the instructions
 ###
-while IFS="" read -r line || [ -n "$line" ]; do
-    col_num=`echo $line | grep -oE "^([0-9]+)"`
 
-    if [ -z "$col_num" ]; then
+SED_LINUM_PAT='/^[0-9]+\s*/!{q100}; s/(^[0-9]+).*/\1/'
+SED_COLOR_PAT='/.*#[0-9a-fA-F]{6}/!{q101}; s/.*#([0-9a-fA-F]{6}).*/\1/'
+SED_EMPTY_PAT='/^\s*$/{q99}; /^[#!;].*/{q99}'
+linum=0
+
+while IFS="" read -r line || [ -n "$line" ]; do
+    # Line counter to help debug
+    ((linum++))
+
+    # Ignore empty, whitespace'd or commented out lines
+    echo $line | sed -rn "${SED_EMPTY_PAT}"
+    if [ $? -eq 99 ]; then
         continue
     fi
 
-    col_hex=`echo $line | grep -oE "(.{6})$"`
+    # Parse the line number, exit with error code if no match
+    col_num=`echo $line | sed -r "${SED_LINUM_PAT}"`
+
+    # Check sed exit value
+    if [ $? -ne 0 ]; then
+        echo "Error: ${theme_file_path}: line ${linum}: missing color number" >&2
+        exit 6
+    fi
+
+    # Parse the color, exit with error code if no match
+    col_hex=`echo $line | sed -r "${SED_COLOR_PAT}"`
+
+    # Check our exit value again
+    if [ $? -ne 0 ]; then
+        echo "Error: ${theme_file_path}: line ${linum}: missing or invalid color code" >&2
+        exit 7
+    fi
+
+    # Translate colors to decimal R,G,B
     col_r=$(( 16#${col_hex:0:2} ))
     col_g=$(( 16#${col_hex:2:2} ))
     col_b=$(( 16#${col_hex:4:2} ))
-    [ $verbose == 0 ] || printf "setting color %03d: #%s/%d,%d,%d\n"\
-        $col_num $col_hex $col_r $col_g $col_b
+
+    # Print progress messages
+    [ $verbose == 0 ] || printf "setting color %03d: #%s/%03d,%03d,%03d\n"\
+                                $col_num $col_hex $col_r $col_g $col_b
+
+    # Construct and output the final escape sequence
     col_escape="\e[3;${col_num};${col_r};${col_g};${col_b}}"
     echo -en $col_escape
 done < $theme_file_path
