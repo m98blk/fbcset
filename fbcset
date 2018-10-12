@@ -9,14 +9,14 @@
 ###
 # Declare constants and flags
 ###
-FBCSET_VERSION='0.2.0'
+FBCSET_VERSION='0.3.0'
 THEME_FILE_DIR="${HOME}/.fbthemes"
 verbose=1
 ignore_errs=0
 default_path=1
 
 display_version() {
-    echo "fbcset version ${FBCSET_VERSION} by Matt Black, 2018"
+    echo "fbcset version ${FBCSET_VERSION} by Matyas Cerny, 2018"
 }
 
 display_help() {
@@ -29,6 +29,7 @@ Options:
                                     scanning the default directory
     -h | --help                 Print this help text and exit
     -i | --ignore-errors        Ignore invalid lines instead of aborting
+    -l | --list                 Print a list of available themes and exit
     -q | --quiet                Suppress standard output
     -v | --version              Print version and exit
 
@@ -50,11 +51,29 @@ Example:
 EOF
 }
 
+check_theme_folder() {
+    if [ ! -e $THEME_FILE_DIR ]; then
+        echo 'Error: directory ~/.fbthemes not found' >&2
+        exit 2
+    elif [ ! -d $THEME_FILE_DIR ]; then
+        echo 'Error: ~/.fbthemes is not a directory' >&2
+        exit 3
+    fi
+}
+
+display_themes() {
+    theme_list="`ls -1 ${THEME_FILE_DIR} 2>/dev/null`"
+    if [ $? -eq 0 ]; then
+        [ -z theme_list ] && echo "No themes found." || echo "${theme_list}"
+    fi
+    check_theme_folder
+}
+
 
 ###
 # Handle opts
 ###
-opts=$(getopt -o 'f:hiqv' -l 'file:,help,ignore-errors,quiet,version' -n 'fbcset' -- "$@")
+opts=$(getopt -o 'f:hilqv' -l 'file:,help,ignore-errors,list,quiet,version' -n 'fbcset' -- "$@")
 if [ $? -ne 0 ]; then
     echo "Error: couldn't get options" >&2
     exit 1
@@ -81,6 +100,11 @@ while true; do
             ignore_errs=1
             shift
             continue
+            ;;
+
+        '-l'|'--list')
+            display_themes
+            exit 0
             ;;
         
         '-q'|'--quiet')
@@ -114,13 +138,7 @@ if [ $default_path != 0 ]; then
         display_help
         exit 5
     fi
-    if [ ! -e $THEME_FILE_DIR ]; then
-        echo 'Error: directory ~/.fbthemes not found' >&2
-        exit 2
-    elif [ ! -d $THEME_FILE_DIR ]; then
-        echo 'Error: ~/.fbthemes is not a directory' >&2
-        exit 3
-    fi
+    check_theme_folder
     theme_file_name="$1"
     theme_file_path="${THEME_FILE_DIR}/${theme_file_name}"
 fi
