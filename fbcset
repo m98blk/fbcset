@@ -1,4 +1,5 @@
 #!/bin/bash
+
 #####
 # fbcset: fbterm color theme setter
 # by Matt Black, 2018
@@ -8,9 +9,10 @@
 ###
 # Declare constants and flags
 ###
-FBCSET_VERSION='0.1.0'
+FBCSET_VERSION='0.2.0'
 THEME_FILE_DIR="${HOME}/.fbthemes"
 verbose=1
+ignore_errs=0
 default_path=1
 
 display_version() {
@@ -26,6 +28,7 @@ Options:
     -f | --file <path>          Read from a given file instead of
                                     scanning the default directory
     -h | --help                 Print this help text and exit
+    -i | --ignore-errors        Ignore invalid lines instead of aborting
     -q | --quiet                Suppress standard output
     -v | --version              Print version and exit
 
@@ -37,9 +40,13 @@ assigning one color per line in the following format:
 <color#_decimal> #rrggbb
 
 Example:
+# Lines starting with one of the following symbols are comments. # ! ;
+# Empty lines are ignored.
+
 0       #202020
 8       #4c4c4c
 12      #a02030
+220     #fb1337
 EOF
 }
 
@@ -47,9 +54,9 @@ EOF
 ###
 # Handle opts
 ###
-opts=$(getopt -o 'f:hqv' -l 'file:,help,quiet,version' -n 'fbcset' -- "$@")
+opts=$(getopt -o 'f:hiqv' -l 'file:,help,ignore-errors,quiet,version' -n 'fbcset' -- "$@")
 if [ $? -ne 0 ]; then
-    echo "Error getting options" >&2
+    echo "Error: couldn't get options" >&2
     exit 1
 fi
 
@@ -69,13 +76,19 @@ while true; do
             display_help
             exit 0
             ;;
+
+        '-i'|'--ignore-errors')
+            ignore_errs=1
+            shift
+            continue
+            ;;
         
         '-q'|'--quiet')
             verbose=0
             shift
             continue
             ;;
-            
+
         '-v'|'--version')
             display_version
             exit 0
@@ -94,7 +107,7 @@ done
 ###
 
 # File path checks
-if [ $default_path == 1 ]; then
+if [ $default_path != 0 ]; then
     
     # Display help if arg missing
     if [ -z $1 ]; then
@@ -125,15 +138,15 @@ elif [ ! -r $theme_file_path ]; then
 fi
 
 
-
 ###
-# Parse and fulfill the instructions
+# Parse and prepare the escapes
 ###
 
 SED_LINUM_PAT='/^[0-9]+\s*/!{q100}; s/(^[0-9]+).*/\1/'
 SED_COLOR_PAT='/.*#[0-9a-fA-F]{6}/!{q101}; s/.*#([0-9a-fA-F]{6}).*/\1/'
 SED_EMPTY_PAT='/^\s*$/{q99}; /^[#!;].*/{q99}'
 linum=0
+esc_arr=()
 
 while IFS="" read -r line || [ -n "$line" ]; do
     # Line counter to help debug
@@ -151,7 +164,7 @@ while IFS="" read -r line || [ -n "$line" ]; do
     # Check sed exit value
     if [ $? -ne 0 ]; then
         echo "Error: ${theme_file_path}: line ${linum}: missing color number" >&2
-        exit 6
+        [ $ignore_errs != 0 ] && continue || exit 6
     fi
 
     # Parse the color, exit with error code if no match
@@ -160,7 +173,7 @@ while IFS="" read -r line || [ -n "$line" ]; do
     # Check our exit value again
     if [ $? -ne 0 ]; then
         echo "Error: ${theme_file_path}: line ${linum}: missing or invalid color code" >&2
-        exit 7
+        [ $ignore_errs != 0 ] && continue || exit 7
     fi
 
     # Translate colors to decimal R,G,B
@@ -169,14 +182,18 @@ while IFS="" read -r line || [ -n "$line" ]; do
     col_b=$(( 16#${col_hex:4:2} ))
 
     # Print progress messages
-    [ $verbose == 0 ] || printf "setting color %03d: #%s/%03d,%03d,%03d\n"\
+    [ $verbose == 0 ] || printf "color %3d: #%s | %3d,%3d,%3d\n"\
                                 $col_num $col_hex $col_r $col_g $col_b
 
     # Construct and output the final escape sequence
     col_escape="\e[3;${col_num};${col_r};${col_g};${col_b}}"
-    echo -en $col_escape
+    esc_arr[$col_num]="${col_escape}"
 done < $theme_file_path
 
+[ $verbose == 0 ] || echo -n "setting new colors... "
+for esc in ${esc_arr[*]}; do
+    echo -en "${esc}"
+done
 [ $verbose == 0 ] || echo "done"
 
 exit 0
