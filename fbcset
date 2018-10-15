@@ -9,8 +9,9 @@
 ###
 # Declare constants and flags
 ###
-FBCSET_VERSION='0.3.0'
+FBCSET_VERSION='0.3.1'
 THEME_FILE_DIR="${HOME}/.fbthemes"
+stdin_as_source=0
 verbose=1
 ignore_errs=0
 default_path=1
@@ -22,7 +23,7 @@ display_version() {
 display_help() {
     display_version
     cat << 'EOF'
-Usage: fbcset [options] theme-file-name
+Usage: fbcset [options] [theme-file-name]
 
 Options:
     -f | --file <path>          Read from a given file instead of
@@ -35,6 +36,7 @@ Options:
 
 By default, fbcset looks for themes in the $HOME/.fbthemes directory.
 You can set the path explicitly using the -f option.
+If no theme name or explicit path is passed, fbcset will read from stdin.
 
 Theme files may contain any number (within fbterm's capabilities) of lines,
 assigning one color per line in the following format:
@@ -127,32 +129,38 @@ done
 
 
 ###
+# Check for stdin flag
+###
+if [ -z $1 ]; then
+    stdin_as_source=1
+fi
+
+
+###
 # Find the theme if custom path not set
 ###
 
 # File path checks
-if [ $default_path != 0 ]; then
-    
-    # Display help if arg missing
-    if [ -z $1 ]; then
-        display_help
-        exit 5
-    fi
+if [ $default_path != 0 -a $stdin_as_source == 0 ]; then
     check_theme_folder
     theme_file_name="$1"
     theme_file_path="${THEME_FILE_DIR}/${theme_file_name}"
 fi
 
 # Check if we can find and read the given file
-if [ ! -e $theme_file_path ]; then
-    echo "Error: file ${theme_file_path} not found" >&2
-    exit 2
-elif [ -d $theme_file_path ]; then
-    echo "Error: target file is a directory" >&2
-    exit 3
-elif [ ! -r $theme_file_path ]; then
-    echo "Error: could not read theme file" >&2
-    exit 4
+if [ $stdin_as_source == 0 ]; then
+    
+    if [ ! -e $theme_file_path ]; then
+        echo "Error: file ${theme_file_path} not found" >&2
+        exit 2
+    elif [ -d $theme_file_path ]; then
+        echo "Error: target file is a directory" >&2
+        exit 3
+    elif [ ! -r $theme_file_path ]; then
+        echo "Error: could not read theme file" >&2
+        exit 4
+    fi
+
 fi
 
 
@@ -181,7 +189,7 @@ while IFS="" read -r line || [ -n "$line" ]; do
 
     # Check sed exit value
     if [ $? -ne 0 ]; then
-        echo "Error: ${theme_file_path}: line ${linum}: missing color number" >&2
+        echo "Error: ${theme_file_path:-stdin}: line ${linum}: missing color number" >&2
         [ $ignore_errs != 0 ] && continue || exit 6
     fi
 
@@ -190,7 +198,7 @@ while IFS="" read -r line || [ -n "$line" ]; do
 
     # Check our exit value again
     if [ $? -ne 0 ]; then
-        echo "Error: ${theme_file_path}: line ${linum}: missing or invalid color code" >&2
+        echo "Error: ${theme_file_path:-stdin}: line ${linum}: missing or invalid color code" >&2
         [ $ignore_errs != 0 ] && continue || exit 7
     fi
 
@@ -206,7 +214,7 @@ while IFS="" read -r line || [ -n "$line" ]; do
     # Construct and output the final escape sequence
     col_escape="\e[3;${col_num};${col_r};${col_g};${col_b}}"
     esc_arr[$col_num]="${col_escape}"
-done < $theme_file_path
+done < ${theme_file_path:-/dev/stdin}
 
 [ $verbose == 0 ] || echo -n "setting new colors... "
 for esc in ${esc_arr[*]}; do
