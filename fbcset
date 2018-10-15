@@ -9,12 +9,13 @@
 ###
 # Declare constants and flags
 ###
-FBCSET_VERSION='0.3.1'
+FBCSET_VERSION='1.0.0'
 THEME_FILE_DIR="${HOME}/.fbthemes"
 stdin_as_source=0
 verbose=1
 ignore_errs=0
 default_path=1
+xresources_compat=0
 
 display_version() {
     echo "fbcset version ${FBCSET_VERSION} by Matyas Cerny, 2018"
@@ -33,6 +34,7 @@ Options:
     -l | --list                 Print a list of available themes and exit
     -q | --quiet                Suppress standard output
     -v | --version              Print version and exit
+    -x | --xresources           Xresources format compatibility mode
 
 By default, fbcset looks for themes in the $HOME/.fbthemes directory.
 You can set the path explicitly using the -f option.
@@ -75,7 +77,8 @@ display_themes() {
 ###
 # Handle opts
 ###
-opts=$(getopt -o 'f:hilqv' -l 'file:,help,ignore-errors,list,quiet,version' -n 'fbcset' -- "$@")
+opts=$(getopt -o 'f:hilqvx' -l\
+              'file:,help,ignore-errors,list,quiet,version,xresources' -n 'fbcset' -- "$@")
 if [ $? -ne 0 ]; then
     echo "Error: couldn't get options" >&2
     exit 1
@@ -118,6 +121,12 @@ while true; do
         '-v'|'--version')
             display_version
             exit 0
+            ;;
+
+        '-x'|'--xresources')
+            xresources_compat=1
+            shift
+            continue
             ;;
 
         '--')
@@ -168,9 +177,16 @@ fi
 # Parse and prepare the escapes
 ###
 
-SED_LINUM_PAT='/^[0-9]+\s*/!{q100}; s/(^[0-9]+).*/\1/'
+SED_COLNUM_PAT='/^[0-9]+\s*/!{q100}; s/(^[0-9]+).*/\1/'
 SED_COLOR_PAT='/.*#[0-9a-fA-F]{6}/!{q101}; s/.*#([0-9a-fA-F]{6}).*/\1/'
 SED_EMPTY_PAT='/^\s*$/{q99}; /^[#!;].*/{q99}'
+
+if [ $xresources_compat != 0 ]; then
+    SED_COLNUM_PAT='/^[^!][[:alnum:]]*\*?\.?color([0-9]+)|(background)|(foreground):.*/!{q100}; 
+         s/^.*background:.*$/0/; s/^.*(foreground):.*$/7/; s/^.*color([0-9]+):.*/\1/'
+    SED_EMPTY_PAT=$SED_EMPTY_PAT'; /^.*(color[0-9]+)|(background)|(foreground).*$/!{q99}'
+fi
+
 linum=0
 esc_arr=()
 
@@ -179,13 +195,14 @@ while IFS="" read -r line || [ -n "$line" ]; do
     ((linum++))
 
     # Ignore empty, whitespace'd or commented out lines
-    echo $line | sed -rn "${SED_EMPTY_PAT}"
+    empty_check=`echo $line | sed -r "${SED_EMPTY_PAT}"`
     if [ $? -eq 99 ]; then
+        #echo "skipped: ${empty_check}" # debug
         continue
     fi
 
-    # Parse the line number, exit with error code if no match
-    col_num=`echo $line | sed -r "${SED_LINUM_PAT}"`
+    # Parse the color number, exit with error code if no match
+    col_num=`echo $line | sed -r "${SED_COLNUM_PAT}"`
 
     # Check sed exit value
     if [ $? -ne 0 ]; then
@@ -208,12 +225,13 @@ while IFS="" read -r line || [ -n "$line" ]; do
     col_b=$(( 16#${col_hex:4:2} ))
 
     # Print progress messages
-    [ $verbose == 0 ] || printf "color %3d: #%s | %3d,%3d,%3d\n"\
-                                $col_num $col_hex $col_r $col_g $col_b
+    [ $verbose != 0 ] && [ -z ${esc_arr[$col_num]} ] && \
+        printf "color %3d: #%s | %3d,%3d,%3d\n"\
+               $col_num $col_hex $col_r $col_g $col_b
 
     # Construct and output the final escape sequence
     col_escape="\e[3;${col_num};${col_r};${col_g};${col_b}}"
-    esc_arr[$col_num]="${col_escape}"
+    [ -z ${esc_arr[$col_num]} ] && esc_arr[$col_num]="${col_escape}"
 done < ${theme_file_path:-/dev/stdin}
 
 [ $verbose == 0 ] || echo -n "setting new colors... "
