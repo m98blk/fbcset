@@ -8,7 +8,7 @@
 
 **How to Install**
 
-1. `git clone https://github.com/cernym55/fbcset fbcset`
+1. `git clone https://github.com/m98blk/fbcset fbcset`
 2. That's it
 
 **How to Use**
@@ -19,4 +19,4 @@
 
 This program is released under The Unlicense. See the LICENSE file for more information.
 
-**Author:** Matyas Cerny/Matt Black
+**Author:** m98blk
