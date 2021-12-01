@@ -18,7 +18,7 @@ default_path=1
 xresources_compat=0
 
 display_version() {
-    echo "fbcset version ${FBCSET_VERSION} by Matyas Cerny, 2018"
+    echo "fbcset version ${FBCSET_VERSION} by Matt Black, 2018"
 }
 
 display_help() {
